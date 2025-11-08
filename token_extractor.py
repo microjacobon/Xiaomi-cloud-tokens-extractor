@@ -877,9 +877,9 @@ def main() -> None:
                             print_entry("NAME", device["name"], 3)
                         if "did" in device:
                             print_entry("ID", device["did"], 3)
-                            if "blt" in device["did"]:
+                            if "blt" in device["did"] or True:
                                 beaconkey = connector.get_beaconkey(current_server, device["did"])
-                                if beaconkey and "result" in beaconkey and "beaconkey" in beaconkey["result"]:
+                                if beaconkey and "result" in beaconkey and "beaconkey" in beaconkey["result"] and beaconkey["result"]["beaconkey"] != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF":
                                     print_entry("BLE KEY", beaconkey["result"]["beaconkey"], 3)
                                     device_data["BLE_DATA"] = beaconkey["result"]
                         if "mac" in device:
