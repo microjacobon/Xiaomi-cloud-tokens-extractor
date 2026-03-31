@@ -824,6 +824,68 @@ def present_image_image(
             print_if_interactive(message_manually_open_file.format(tmp_path))
 
 
+def fetch_devices_for_servers(connector: XiaomiCloudConnector, servers_to_check: list[str]) -> list[dict]:
+    output = []
+    for current_server in servers_to_check:
+        all_homes = []
+        homes = connector.get_homes(current_server)
+        if homes is not None:
+            for h in homes["result"]["homelist"]:
+                all_homes.append({"home_id": h["id"], "home_owner": connector.userId})
+        dev_cnt = connector.get_dev_cnt(current_server)
+        if dev_cnt is not None:
+            for h in dev_cnt["result"]["share"]["share_family"]:
+                all_homes.append({"home_id": h["home_id"], "home_owner": h["home_owner"]})
+
+        if len(all_homes) == 0:
+            print_if_interactive(f'{Fore.RED}No homes found for server "{current_server}".')
+
+        for home in all_homes:
+            devices = connector.get_devices(current_server, home["home_id"], home["home_owner"])
+            home["devices"] = []
+            if devices is not None:
+                if devices["result"]["device_info"] is None or len(devices["result"]["device_info"]) == 0:
+                    print_if_interactive(f'{Fore.RED}No devices found for server "{current_server}" @ home "{home["home_id"]}".')
+                    continue
+                print_if_interactive(f'Devices found for server "{current_server}" @ home "{home["home_id"]}":')
+                for device in devices["result"]["device_info"]:
+                    device_data = {**device}
+                    print_tabbed(f"{Fore.BLUE}---------", 3)
+                    if "name" in device:
+                        print_entry("NAME", device["name"], 3)
+                    if "did" in device:
+                        print_entry("ID", device["did"], 3)
+                        if "blt" in device["did"]:
+                            beaconkey = connector.get_beaconkey(current_server, device["did"])
+                            if beaconkey and "result" in beaconkey and "beaconkey" in beaconkey["result"]:
+                                print_entry("BLE KEY", beaconkey["result"]["beaconkey"], 3)
+                                device_data["BLE_DATA"] = beaconkey["result"]
+                    if "mac" in device:
+                        print_entry("MAC", device["mac"], 3)
+                    if "localip" in device:
+                        print_entry("IP", device["localip"], 3)
+                    if "token" in device:
+                        print_entry("TOKEN", device["token"], 3)
+                    if "model" in device:
+                        print_entry("MODEL", device["model"], 3)
+                    home["devices"].append(device_data)
+                print_tabbed(f"{Fore.BLUE}---------", 3)
+                print_if_interactive()
+            else:
+                print_if_interactive(f"{Fore.RED}Unable to get devices from server {current_server}.")
+        output.append({"server": current_server, "homes": all_homes})
+    return output
+
+
+def should_fetch_same_servers_again(servers_to_check: list[str]) -> bool:
+    if args.non_interactive:
+        return False
+
+    server_label = ", ".join(servers_to_check)
+    print_if_interactive(f"Fetch data from the same server(s) again {Fore.BLUE}({server_label}){Style.RESET_ALL}? [y/N]:")
+    return input().strip().lower() in ["y", "yes"]
+
+
 def main() -> None:
     print_banner()
     if args.non_interactive:
@@ -846,59 +908,14 @@ def main() -> None:
         print_if_interactive(f"{Fore.GREEN}Logged in.")
         print_if_interactive()
         servers_to_check = get_servers_to_check()
-        print_if_interactive()
-        output = []
-        for current_server in servers_to_check:
-            all_homes = []
-            homes = connector.get_homes(current_server)
-            if homes is not None:
-                for h in homes["result"]["homelist"]:
-                    all_homes.append({"home_id": h["id"], "home_owner": connector.userId})
-            dev_cnt = connector.get_dev_cnt(current_server)
-            if dev_cnt is not None:
-                for h in dev_cnt["result"]["share"]["share_family"]:
-                    all_homes.append({"home_id": h["home_id"], "home_owner": h["home_owner"]})
-
-            if len(all_homes) == 0:
-                print_if_interactive(f'{Fore.RED}No homes found for server "{current_server}".')
-
-            for home in all_homes:
-                devices = connector.get_devices(current_server, home["home_id"], home["home_owner"])
-                home["devices"] = []
-                if devices is not None:
-                    if devices["result"]["device_info"] is None or len(devices["result"]["device_info"]) == 0:
-                        print_if_interactive(f'{Fore.RED}No devices found for server "{current_server}" @ home "{home["home_id"]}".')
-                        continue
-                    print_if_interactive(f'Devices found for server "{current_server}" @ home "{home["home_id"]}":')
-                    for device in devices["result"]["device_info"]:
-                        device_data = {**device}
-                        print_tabbed(f"{Fore.BLUE}---------", 3)
-                        if "name" in device:
-                            print_entry("NAME", device["name"], 3)
-                        if "did" in device:
-                            print_entry("ID", device["did"], 3)
-                            if "blt" in device["did"]:
-                                beaconkey = connector.get_beaconkey(current_server, device["did"])
-                                if beaconkey and "result" in beaconkey and "beaconkey" in beaconkey["result"]:
-                                    print_entry("BLE KEY", beaconkey["result"]["beaconkey"], 3)
-                                    device_data["BLE_DATA"] = beaconkey["result"]
-                        if "mac" in device:
-                            print_entry("MAC", device["mac"], 3)
-                        if "localip" in device:
-                            print_entry("IP", device["localip"], 3)
-                        if "token" in device:
-                            print_entry("TOKEN", device["token"], 3)
-                        if "model" in device:
-                            print_entry("MODEL", device["model"], 3)
-                        home["devices"].append(device_data)
-                    print_tabbed(f"{Fore.BLUE}---------", 3)
-                    print_if_interactive()
-                else:
-                    print_if_interactive(f"{Fore.RED}Unable to get devices from server {current_server}.")
-            output.append({"server": current_server, "homes": all_homes})
-        if args.output:
-            with open(args.output, "w") as f:
-                f.write(json.dumps(output, indent=4))
+        while True:
+            print_if_interactive()
+            output = fetch_devices_for_servers(connector, servers_to_check)
+            if args.output:
+                with open(args.output, "w") as f:
+                    f.write(json.dumps(output, indent=4))
+            if not should_fetch_same_servers_again(servers_to_check):
+                break
     else:
         print_if_interactive(f"{Fore.RED}Unable to log in.")
 
