@@ -882,8 +882,11 @@ def should_fetch_same_servers_again(servers_to_check: list[str]) -> bool:
         return False
 
     server_label = ", ".join(servers_to_check)
-    print_if_interactive(f"Fetch data from the same server(s) again {Fore.BLUE}({server_label}){Style.RESET_ALL}? [y/N]:")
-    return input().strip().lower() in ["y", "yes"]
+    print_if_interactive(f"Fetch data from the same server(s) again {Fore.BLUE}({server_label}){Style.RESET_ALL}? [Y/n]:")
+    resp = input().strip().lower()
+    if resp == "":
+        return True
+    return resp in ["y", "yes"]
 
 
 def main() -> None:
